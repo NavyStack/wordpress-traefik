@@ -1,0 +1,102 @@
+version: "3.9"
+
+services:
+  nginx-ns:
+    image: nginx:mainline
+    restart: unless-stopped
+    logging:
+      options:
+        max-size: "10m"
+    depends_on:
+      - wordpress
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.services.wordpress-srv.loadbalancer.server.port=80"
+      - "traefik.http.services.wordpress-srv.loadbalancer.passhostheader=true"
+      - "traefik.http.routers.wordpress-rt.rule=Host(`navystack.com`) || Host(`www.navystack.com`)" ## 수정
+      - "traefik.http.routers.wordpress-rt.entrypoints=websecure"
+      - "traefik.http.routers.wordpress-rt.service=wordpress-srv"
+      - "traefik.http.routers.wordpress-rt.middlewares=www-to-Root@file, security-headers@file"
+      - "traefik.http.routers.wordpress-rt.tls=true"
+      - "traefik.http.routers.wordpress-rt.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.wordpress-rt.tls.domains[0].main=navystack.com" ## 수정
+      - "traefik.http.routers.wordpress-rt.tls.domains[0].sans=www.navystack.com" ## 수정
+
+    volumes:
+      - ./data/wordpress:/var/www/html
+      - ./nginx:/etc/nginx/conf.d
+    networks:
+      - traefik-network
+      - internal
+
+  wordpress:
+    image: wordpress:php8.2-fpm
+    restart: unless-stopped
+    logging:
+      options:
+        max-size: "10m"
+    environment:
+      WORDPRESS_DB_HOST: wordpress-db
+      WORDPRESS_DB_NAME: wordpress_database
+      WORDPRESS_DB_USER: wordpress-demo
+      WORDPRESS_DB_PASSWORD: "NPqc4Lx8Bz@lxuiU2iIgjos&l6jJGX"
+      WORDPRESS_CONFIG_EXTRA: |
+        define( 'WP_REDIS_HOST', 'redis-wp' );
+        define( 'WP_REDIS_PORT', 6379 );
+        define( 'WP_REDIS_PASSWORD', 'KOWveT8Z3XFVrsE72mmjls8BvwAQxh' );
+        define( 'WP_REDIS_PREFIX', 'Hq89yBvr6fRu7FqbQS9aSRXGzTFxDV' );
+        define( 'DB_CHARSET', 'utf8mb4' );
+        define( 'FS_METHOD', 'direct' );
+        define( 'WP_DEBUG_DISPLAY', false );
+        define( 'WP_DEBUG_LOG', true );
+        define( 'CONCATENATE_SCRIPTS', false );
+        define( 'AUTOSAVE_INTERVAL', 600 );
+        define( 'WP_POST_REVISIONS', 5 );
+        define( 'EMPTY_TRASH_DAYS', 21 );
+    volumes:
+      - ./data/wordpress:/var/www/html
+      - ./php/custom.ini:/usr/local/etc/php/conf.d/custom.ini
+    networks:
+      - internal
+
+  redis-wp:
+    image: redis:latest
+    restart: unless-stopped
+    logging:
+      options:
+        max-size: "10m"
+    command: ["redis-server", "--requirepass", "KOWveT8Z3XFVrsE72mmjls8BvwAQxh"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    volumes:
+      - redis-wp:/data
+    networks:
+      - internal
+
+  wordpress-db:
+    image: mariadb:${MARIADB_VERSION:-10.7}
+    volumes:
+      - db_data:/var/lib/mysql
+      - db_socket:/var/lib/mysqld
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: "vYVTZmP0YMjsRoU2rK&A1XwS9T12G$"
+      MYSQL_DATABASE: wordpress_database
+      MYSQL_USER: wordpress-demo
+      MYSQL_PASSWORD: "NPqc4Lx8Bz@lxuiU2iIgjos&l6jJGX"
+    networks:
+      - internal
+
+networks:
+  traefik-network:
+    external: true
+  internal:
+
+volumes:
+  redis-wp:
+  db_data:
+  db_socket:
